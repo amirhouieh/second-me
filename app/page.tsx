@@ -8,19 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Send } from "lucide-react";
 import { MemoryEngine } from "@/lib/memory/engine";
 import { initMemoryEngine } from "@/lib/memory/init";
-import type { TSnapshot } from "@/lib/memory/types";
+import type { MemoryContext, TSnapshot } from "@/lib/memory/types";
 import { UIToolResult } from "@/hooks/use-ui-composer-simple";
 import { UIRenderer } from "@/components/ui-composer-simple/ui-renderer";
 import { omit } from "@/lib/utils";
 import { DataToolName } from "@/lib/agent/tools/data-tools/names";
 import { useNewToolCallingStream, ToolingPhase } from "@/hooks/new-tool-hook";
 import { ClientOnly } from "@/components/ui/client-only";
-
-interface CurrentTurn {
-  snapshot: TSnapshot;
-  uiComponents: UIToolResult[];
-  id: string;
-}
+import { useStreamText } from "@/hooks/useStreamText";
+import { AgentStreamEventType } from "@/lib/agent/stream-events";
+import { MemoryToolNames } from "@/lib/agent/tools/memory-tools";
+import { PreviousTool } from "@/lib/agent/types";
 
 export default function HomePage() {
   const [query, setQuery] = useState("");
@@ -35,10 +33,15 @@ export default function HomePage() {
   const [uiComponentsBySnapshotId, setUIComponentsBySnapshotId] = useState<Record<string, any[]>>({});
 
   const uiTargetSnapshotIdRef = useRef<string | null>(null);
+  const hasStartedAssistantForIdRef = useRef<string>('');
+  const hasCommittedForIdRef = useRef<string>('');
 
   const [dataToolStatusText, setDataToolStatusText] = useState<string | null>(null);
   const [uiToolStatusText, setUIToolStatusText] = useState<string | null>(null);
 
+  const [previousTools, setPreviousTools] = useState<PreviousTool[]>([]);
+
+  const memoryContextRef = useRef<MemoryContext | null>(null);
 
   // Data tools hook
   const dataTools = useNewToolCallingStream('/api/agent');
@@ -69,6 +72,99 @@ export default function HomePage() {
     lastCompletedTool: lastUITool,
     isFinished: isUIFinished
   } = uiTools;
+
+  const assistantStream = useStreamText({
+    api: '/api/agent/respond',
+  });
+
+  // Minimal UI feedback for assistant status
+  useEffect(() => {
+    if (assistantStream.status === AgentStreamEventType.Start) {
+      setDataToolStatusText("Responding...");
+    } else if (assistantStream.status === AgentStreamEventType.TextStart) {
+      setDataToolStatusText(null);
+    }
+  }, [assistantStream.status]);
+
+  // Step 1 – Data tools finished -> start assistant once
+  useEffect(() => {
+    if (!currentSnapshot?.id || !currentSnapshot.q) return;
+    if (dataToolingState.phase !== ToolingPhase.Finished) return;
+    if (hasStartedAssistantForIdRef.current === currentSnapshot.id) return;
+
+    hasStartedAssistantForIdRef.current = currentSnapshot.id;
+    console.log(dataResults);
+    assistantStream.send({
+      messages: [{ role: 'user', content: currentSnapshot.q }],
+      data: {
+        memoryContext: memoryContextRef.current,
+        toolResults: dataResults || {},
+        previousTools,
+      },
+    });
+  }, [dataToolingState.phase, currentSnapshot?.id, currentSnapshot?.q, dataResults, assistantStream]);
+
+  // Step 2 – Assistant finished -> UI composition or commit
+  useEffect(() => {
+    if (!currentSnapshot?.id) return;
+    if (assistantStream.status !== AgentStreamEventType.TextEnd) return;
+
+    const alreadyCommitted = hasCommittedForIdRef.current === currentSnapshot.id;
+    const alreadyTriggeredUI = hasTriggeredUIRef.current === currentSnapshot.id;
+    if (alreadyCommitted || alreadyTriggeredUI) return;
+
+    const dataForUI = omit(dataResults || {}, [
+      DataToolName.ParseQuery, 
+      DataToolName.Think,
+      MemoryToolNames.GetMemoryContext,
+      MemoryToolNames.GetHistory,
+    ]);
+    const hasDataForUI = Object.keys(dataForUI).length > 0;
+
+    if (hasDataForUI) {
+      hasTriggeredUIRef.current = currentSnapshot.id;
+      setUIToolStatusText("Composing UI...");
+      sendUIMessages([], {
+        query: currentSnapshot.q ?? '',
+        assistantResponse: assistantStream.output,
+        dataPayload: dataForUI,
+        previousTools,
+      });
+    } else {
+      setWaitingSnapshot(true);
+      setUIToolStatusText("Memorizing...");
+      commit()
+        .then(() => {
+          setUIToolStatusText(null);
+        })
+        .catch((e) => {
+          console.error('❌ Memory commit error:', e);
+          setWaitingSnapshot(false);
+        });
+      hasCommittedForIdRef.current = currentSnapshot.id;
+    }
+  }, [assistantStream.status, assistantStream.output, currentSnapshot?.id, currentSnapshot?.q, dataResults, sendUIMessages]);
+
+  // Step 3 – UI composition finished -> commit
+  useEffect(() => {
+    if (!currentSnapshot?.id) return;
+    if (uiToolingState.phase !== ToolingPhase.Finished) return;
+    if (hasTriggeredUIRef.current !== currentSnapshot.id) return;
+    if (hasCommittedForIdRef.current === currentSnapshot.id) return;
+
+    setWaitingSnapshot(true);
+    setUIToolStatusText("Memorizing...");
+    commit()
+      .then(() => {
+        setUIToolStatusText(null);
+      })
+      .catch((e) => {
+        console.error('❌ Memory commit error:', e);
+        setWaitingSnapshot(false);
+      });
+    hasCommittedForIdRef.current = currentSnapshot.id;
+  }, [uiToolingState.phase, currentSnapshot?.id]);
+
 
   const isLoading = isDataLoading || isUILoading;
 
@@ -103,16 +199,21 @@ export default function HomePage() {
 
   }, []);
 
-  // Update current snapshot as assistant text streams
+  // Update current snapshot as assistant text streams (ignore data tools assistant text)
   useEffect(() => {
     if (!currentSnapshot) return;
+    const showAssistant = (
+      assistantStream.status === AgentStreamEventType.TextStart ||
+      assistantStream.status === AgentStreamEventType.TextDelta ||
+      assistantStream.status === AgentStreamEventType.TextEnd
+    );
 
     setCurrentSnapshot(prev => prev ? {
       ...prev,
-      assistant: assistantText || '',
+      assistant: showAssistant ? (assistantStream.output || '') : (prev.assistant || ''),
       payload: dataResults || {},
     } : null);
-  }, [assistantText, dataResults, currentSnapshot?.id]);
+  }, [assistantStream.output, assistantStream.status, dataResults, currentSnapshot?.id]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,7 +237,7 @@ export default function HomePage() {
     setCurrentSnapshot({
       id,
       q,
-      assistant: 'Thinking...',
+      assistant: '',
       payload: {},
       summary: '',
     });
@@ -151,6 +252,11 @@ export default function HomePage() {
     setQuery("");
 
     const memoryContext = await memoryRef.current.buildMemoryContext(q);
+    memoryContextRef.current = memoryContext;
+
+    console.log("🔄 Memory Context for id", id);
+    console.log(JSON.stringify(memoryContext, null, 2));
+    console.log("🔄 Memory Context:");
 
     await sendDataMessages([
       {
@@ -158,12 +264,9 @@ export default function HomePage() {
         content: q,
       }
     ], {
-      memoryContext: {
-        learnings: memoryContext.learnings,
-        recentSummary: memoryContext.recentSummary,
-        recallSummary: memoryContext.recallSummary,
-      },
+      memoryContext,
       snapshots: memoryRef.current.getSnapshots(true),
+      previousTools,
     });
   };
 
@@ -172,15 +275,36 @@ export default function HomePage() {
 
     const finalSnapshot = {
       ...currentSnapshot,
-      assistant: assistantText || currentSnapshot.assistant,
-      payload: dataResults || currentSnapshot.payload,
+      assistant: assistantStream.output || assistantText || currentSnapshot.assistant,
+      payload: {
+        dataTools: omit(dataResults, [
+          DataToolName.ParseQuery, 
+          DataToolName.Think,
+        ]),
+        uiTools: uiResults,
+      },
     } as TSnapshot;
 
+    console.log("Before Commit--------------------------------")
+    console.log('🔄 Final Snapshot: ', currentSnapshot.id, new Date().toISOString());
+    console.log(JSON.stringify(finalSnapshot, null, 2));
+    console.log('🔄 Final Snapshot:');
+    console.log("--------------------------------")
     memoryRef.current?.commit(finalSnapshot);
   };
 
+  const addPreviousTool = (tool: string, type: string) => {
+    const existingTool = previousTools.find(t => t.key === tool);
+    if (existingTool) {
+      setPreviousTools(prev => prev.map(t => t.key === tool ? { ...t, count: t.count + 1 } : t));
+    } else {
+      setPreviousTools(prev => [...prev, { key: tool, type, count: 1 }]);
+    }
+  }
+
   // Data tools status management
   useEffect(() => {
+    console.log("dataToolingState", dataToolingState, dataResults);
     switch (dataToolingState.phase) {
       case ToolingPhase.Starting: {
         setDataToolStatusText("Starting...");
@@ -199,16 +323,17 @@ export default function HomePage() {
         if (lastDataTool) {
           setDataToolStatusText(lastDataTool.label || lastDataTool.name);
         }
+
+        addPreviousTool(lastDataTool?.name || '', 'data-tool');
         break;
       }
 
       case ToolingPhase.StreamingText: {
-        setDataToolStatusText("Responding...");
         break;
       }
 
       case ToolingPhase.Finished: {
-        setDataToolStatusText(null);
+        // setDataToolStatusText(null);
         break;
       }
 
@@ -259,21 +384,7 @@ export default function HomePage() {
       }
 
       case ToolingPhase.Finished: {
-        console.timeEnd('⚡ UI_COMPOSITION_TOTAL');
-        console.log('✅ UI Composition Complete');
-        setWaitingSnapshot(true);
-        setUIToolStatusText("Memorizing...");
-        console.time('💾 MEMORY_COMMIT');
-        commit()
-          .then(() => {
-            console.timeEnd('💾 MEMORY_COMMIT');
-            console.log('✅ Memory Committed');
-            setUIToolStatusText(null);
-          }).catch((e) => {
-            console.timeEnd('💾 MEMORY_COMMIT');
-            console.error('❌ Memory commit error:', e);
-            setWaitingSnapshot(false);
-          });
+        addPreviousTool(lastUITool?.name || '', 'ui-tool');
         break;
       }
 
@@ -303,52 +414,8 @@ export default function HomePage() {
   // Track if UI composition has been triggered for current query
   const hasTriggeredUIRef = useRef<string>('');
 
-  // UI composition trigger OR direct memory commit
-  useEffect(() => {
-    if (!currentSnapshot || !currentSnapshot.id || !currentSnapshot.q) return;
-
-    // 1. Only proceed if the data agent has fully finished its work.
-    if (dataToolingState.phase !== ToolingPhase.Finished) return;
-
-    // 2. Prevent this logic from running more than once for the same turn.
-    const isAlreadyProcessed = hasTriggeredUIRef.current === currentSnapshot.id;
-    if (isAlreadyProcessed) return;
-
-    // 3. Check if any data tools (other than the query parser) were called and returned data.
-    const dataForUI = omit(dataResults || {}, [DataToolName.ParseQuery]);
-    const hasDataForUI = Object.keys(dataForUI).length > 0;
-
-    // --- NEW LOGIC: Route to UI agent OR commit directly ---
-    if (isAllDataToolsFinished && hasDataForUI) {
-      // CASE A: We have data for the UI. Trigger the UI agent as before.
-      console.log(`🎯 UI composition started for snapshot: "${currentSnapshot.id}"`);
-      hasTriggeredUIRef.current = currentSnapshot.id; // Mark as processed
-      sendUIMessages([], {
-        query: currentSnapshot.q,
-        assistantResponse: assistantText,
-        dataPayload: dataForUI,
-      });
-    } else {
-      // CASE B: No data for the UI. This was a simple text response. Commit it now.
-      console.log(`✅ Data-only turn complete. Committing to memory for snapshot: "${currentSnapshot.id}"`);
-      hasTriggeredUIRef.current = currentSnapshot.id; // Mark as processed
-      setWaitingSnapshot(true);
-      setUIToolStatusText("Memorizing..."); // Give user feedback
-
-      commit()
-        .then(() => {
-          console.log('✅ Memory Committed (data-only turn)');
-          setUIToolStatusText(null);
-          // setWaitingSnapshot(false) is handled by the memory engine's 'snapshot' event listener
-        })
-        .catch((e) => {
-          console.error('❌ Memory commit error (data-only turn):', e);
-          setUIToolStatusText("Error saving conversation.");
-          setWaitingSnapshot(false);
-        });
-    }
-
-  }, [
+  // Legacy effect disabled; orchestration handled above
+  useEffect(() => {}, [
     dataToolingState.phase,
     isAllDataToolsFinished,
     currentSnapshot,
@@ -374,7 +441,6 @@ export default function HomePage() {
       result: toolInfo.result as Record<string, unknown>
     }));
 
-    console.log(`🔄 UI Components: [${uiComponents.map(c => c.name).join(', ')}]`);
 
     if (uiComponents.length > 0) {
       setUIComponentsBySnapshotId(prev => ({
@@ -404,7 +470,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-2xl mx-auto space-y-4">
-        {/* Fixed composer at bottom */}
         <div className="fixed inset-x-0 bottom-0">
           <div className="max-w-2xl mx-auto p-4">
             <form onSubmit={onSubmit} className="flex gap-2">
@@ -444,63 +509,45 @@ export default function HomePage() {
                   <div className="max-w-[80%] text-left">
                     <div className="prose prose-sm max-w-none pt-4 pb-4 mb-4">
                       {
-                        (snap?.assistant && String(snap.assistant).trim().length > 0)?
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {snap.assistant}
-                        </ReactMarkdown>
-                        :
-                        dataToolStatusText && ((currentSnapshot?.id === snap.id)) && (
-                          <div className="pb-2 flex items-center gap-2 text-gray-500 mb-2">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            <div className="text-xs text-gray-500">{
-                              dataToolStatusText
-                            }</div>
-                          </div>
+                        (snap?.assistant && String(snap.assistant).trim().length > 0) ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {snap.assistant}
+                          </ReactMarkdown>
+                        ) : (
+                          (currentSnapshot?.id === snap.id) && (
+                            <div className="pb-2 flex items-center gap-2 text-gray-500 mb-2">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <div className="text-xs text-gray-500">{
+                                dataToolStatusText || 'Thinking...'
+                              }</div>
+                            </div>
+                          )
                         )
                       }
                     </div>
                     {/* Render generated UI components if available */}
-                      <div className="">
-                        {
-                          uiToolStatusText && ((currentSnapshot?.id === snap.id)) && (
-                            <div className="pb-2 flex items-center gap-2 text-gray-500 mb-2 mt-4">
-                              {
-                                uiToolStatusText&&
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              }
-                              <div className="text-xs text-gray-500">{
-                                uiToolStatusText?
-                                  uiToolStatusText:
-                                  `Generated ${uiComponentsBySnapshotId[snap.id]?.length} UI components`
-                              }</div>
-                            </div>
-                          )
-                        }
-                        {
-                          uiComponentsBySnapshotId[snap.id]?.length > 0 && (
-                            <UIRenderer components={uiComponentsBySnapshotId[snap.id]} />
-                          )
-                        }
-                      </div>
-
-
-                    {/* Debug info
-                    {process.env.NODE_ENV === 'development' && (
-                      <div className="mt-2 text-xs text-gray-400">
-                        <div>Snap ID: {snap.id}</div>
-                        <div>UI Count: {uiComponentsBySnapshotId[snap.id]?.length || 0}</div>
-                        <div>Data Phase: {dataToolingState.phase}</div>
-                        <div>Data Active: {dataToolingState.activeTools.size}</div>
-                        <div>Data Completed: {dataToolingState.completedTools.size}</div>
-                        <div>All Data Finished: {isAllDataToolsFinished ? 'Yes' : 'No'}</div>
-                        <div>UI Phase: {uiToolingState.phase}</div>
-                        <div>UI Active: {uiToolingState.activeTools.size}</div>
-                        <div>UI Completed: {uiToolingState.completedTools.size}</div>
-                        <div>All UI Finished: {isAllUIToolsFinished ? 'Yes' : 'No'}</div>
-                        <div>Target ID: {uiTargetSnapshotIdRef.current}</div>
-                        <div>Current ID: {currentSnapshot?.id}</div>
-                      </div>
-                    )} */}
+                    <div className="">
+                      {
+                        uiToolStatusText && ((currentSnapshot?.id === snap.id)) && (
+                          <div className="pb-2 flex items-center gap-2 text-gray-500 mb-2 mt-4">
+                            {
+                              uiToolStatusText &&
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            }
+                            <div className="text-xs text-gray-500">{
+                              uiToolStatusText ?
+                                uiToolStatusText :
+                                `Generated ${uiComponentsBySnapshotId[snap.id]?.length} UI components`
+                            }</div>
+                          </div>
+                        )
+                      }
+                      {
+                        uiComponentsBySnapshotId[snap.id]?.length > 0 && (
+                          <UIRenderer components={uiComponentsBySnapshotId[snap.id]} />
+                        )
+                      }
+                    </div>
                   </div>
                 </div>
               </div>

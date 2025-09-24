@@ -2,10 +2,11 @@ import { z } from "zod";
 import { tool as _tool, generateObject } from "ai";
 import { DataToolName } from './names';
 import { cvSchema } from '../types.cv';
-import { outputSchema as parseQueryOutputSchema } from './tool.data.parse-query';
+import { parseQuerySchema } from './tool.data.parse-query';
 
 const inputSchema = z.object({
-  parsedQuery: parseQueryOutputSchema,
+  parsedQuery: parseQuerySchema,
+  query: z.string(),
   resumeSketch: cvSchema,
 });
 
@@ -34,7 +35,7 @@ export const def = {
 export const tool = _tool<TInput, TOutput>({
     description: def.description,
     inputSchema: def.inputSchema,
-    async execute({ parsedQuery, resumeSketch }) {
+    async execute({ parsedQuery, query, resumeSketch }) {
         const { object } = await generateObject({
             model: 'openai/gpt-4.1',
             schema: outputSchema,
@@ -55,7 +56,7 @@ export const tool = _tool<TInput, TOutput>({
                 },
                 {
                     role: 'user',
-                    content: `user query:Query: ${parsedQuery.query}
+                    content: `user query:Query: ${query}
                 `
                 }
             ]

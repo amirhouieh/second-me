@@ -47,11 +47,21 @@ export type MemoryContext = {
 
   recall?: TSnapshot[];
   recent?: TSnapshot[];
+  activeTask?: TaskContext | null;
 };
 
 export type MemoryState = {
   snapshots: TSnapshot[];
   learnings: LearningsState;
+  activeTask?: TaskContext | null;
 };
 
+
+// Task Orchestration types
+export type TaskContext = {
+  taskType: string;
+  status: 'active' | 'completed';
+  state: Record<string, any>;
+  history: string[];
+};
 

@@ -7,6 +7,7 @@ export const DataToolName = {
   ParseQuery: 'parseQuery',
   UiComposer: 'uicomposer',
   GetFollowUps: 'getFollowUps',
+  Think: 'think',
 } as const;
 
 export type DataToolName = typeof DataToolName[keyof typeof DataToolName];

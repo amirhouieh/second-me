@@ -1,42 +1,30 @@
 import type { Learnings } from "../../types";
 
 export default (profile: Learnings.User) => {
-    return `"""
-    Here are learnings so far (retrieved from memory):
+    // Return an empty string if there's nothing to show, to save prompt space.
+    if (!profile || (!profile.profile?.explicit && !profile.assistant?.tone)) {
+        return "";
+    }
 
+    return `
+<user_profile>
+  <explicit>
+    ${profile.profile?.explicit || 'No explicit facts learned.'}
+  </explicit>
+  <implicit>
+    ${profile.profile?.implicit || 'No implicit tendencies learned.'}
+  </implicit>
+</user_profile>
 
-    LEARNINGS FROM USER:
-    <profile_explicit>
-    Excplits learnings (what the user has explicitly stated):
-    ${profile.profile.explicit}
-    </profile_explicit>
-
-    <profile_implicit>
-    Implicit learnings (what the user has implicitly stated):
-    ${profile.profile.implicit}
-    </profile_implicit>
-
-
-    LEARNINGS FOR ASSISTANT(YOU):
-    <tone>
-    Your tone to adopt:
-    ${profile.assistant.tone}
-    </tone>
-
-    <style>
-    Your style to adopt:
-    ${profile.assistant.style}
-    </style>
-
-    <frustration_triggers>
-    Your frustration triggers to avoid:
-    ${profile.assistant.frustration_triggers.join(', ')}
-    </frustration_triggers>
-
-    <engagement_patterns>
-    Your engagement patterns to keep the user engaged:
-    ${profile.assistant.engagement_patterns}
-    </engagement_patterns>
-    """
-    `
+<assistant_instructions>
+  <tone>${profile.assistant?.tone || 'default'}</tone>
+  <style>${profile.assistant?.style || 'default'}</style>
+  <frustration_triggers>
+    ${profile.assistant?.frustration_triggers?.join(', ') || 'None specified.'}
+  </frustration_triggers>
+  <engagement_patterns>
+    ${profile.assistant?.engagement_patterns || 'None specified.'}
+  </engagement_patterns>
+</assistant_instructions>
+`;
 }

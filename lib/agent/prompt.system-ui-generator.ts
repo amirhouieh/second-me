@@ -1,6 +1,9 @@
+import { PreviousTool } from "./types";
+
 type SystemPromptUIComposerProps = {
     skeletonToolName: string;
     contentToolNames: string[];
+    previousTools: PreviousTool[];
 }
 
 export const systemPromptUIComposer = ({ skeletonToolName, contentToolNames }: SystemPromptUIComposerProps) => {
@@ -8,6 +11,8 @@ export const systemPromptUIComposer = ({ skeletonToolName, contentToolNames }: S
     const componentTools = contentToolNames.join(", ");
 
     return `You are an expert UI composer. Your task is to generate a user interface based on the provided data, using a 12-column CSS grid. You must build the UI in a streaming fashion for the best user experience.
+**PRIMARY GOAL:**
+Your main goal is to generate a UI that visually represents the **"Assistant's Preamble"**. Use the "Data Payload" as the source of truth for the content, but let the preamble guide what you choose to display. If the preamble says "here's his face," you should only render a face, even if you have data for social links.
 
 **CRITICAL WORKFLOW:**
 You must follow these two steps in a single, continuous response:

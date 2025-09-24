@@ -1,26 +1,31 @@
 import type { Learnings } from "../../types";
 
+const toYaml = (obj: any, indent = 2): string => {
+  if (!obj || Object.keys(obj).length === 0) return 'None';
+  return Object.entries(obj)
+    .map(([key, value]) => {
+      const valueStr = typeof value === 'object' && value !== null 
+        ? `\n${toYaml(value, indent + 2)}` 
+        : ` ${value}`;
+      return `${' '.repeat(indent)}${key}:${valueStr}`;
+    })
+    .join('\n');
+};
+
 export default (facets: Learnings.Facets) => {
-    return `"""
-    Here are learnings so far (retrieved from memory):
+    if (!facets) return "";
 
-    GRAPH LEARNINGS:
-    <graph>
-    Graph learnings (what the user has explicitly stated):
-    ${JSON.stringify(facets.graph?.entities)}
-    </graph>
+    return `
+<knowledge_graph>
+  ${toYaml(facets.graph?.entities)}
+</knowledge_graph>
 
-    CONVERSATION EVOLUTION LEARNINGS:
-    <conversation_evolution>
-    Conversation evolution learnings (what the user has explicitly stated):
-    ${JSON.stringify(facets.conversation_evolution)}
-    </conversation_evolution>
+<conversation_evolution>
+  ${toYaml(facets.conversation_evolution)}
+</conversation_evolution>
 
-    SAFETY LEARNINGS:
-    <safety>
-    Safety learnings (what the user has explicitly stated):
-    ${JSON.stringify(facets.safety)}
-    </safety>
-    """
-    `
+<safety>
+  ${toYaml(facets.safety)}
+</safety>
+`;
 }

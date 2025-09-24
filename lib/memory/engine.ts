@@ -1,8 +1,9 @@
-import { TSnapshot, type LearningsState, MemoryContext, MemoryState } from './types';
+import { TSnapshot, type LearningsState, MemoryContext, MemoryState, TaskContext } from './types';
 
 import { memPromptSummary, type TMemPromptSummaryJSON } from './prompts/summary';
 import { memPromptUserProfile, type TMemPromptUserProfileJSON } from './prompts/profile';
 import { memPromptFacets, type TMemPromptFacetsJSON } from './prompts/facets';
+import { memPromptOrchestrator, TMemPromptOrchestratorJSON } from './prompts/orchestrator';
 
 import { cosineTopK } from './utils';
 
@@ -62,7 +63,8 @@ const defaultState: MemoryState = {
     facets: defaultFacets,
     ingestableUser: memPromptUserProfile.ingestPrompt(defaultUser),
     ingestableFacets: memPromptFacets.ingestPrompt(defaultFacets)
-  }
+  },
+  activeTask: null,
 };
 
 export class MemoryEngine {
@@ -127,7 +129,7 @@ export class MemoryEngine {
   getLearnings() {
     return this.state.learnings;
   }
-  recent(n = this.opts.recentN ?? 5): TSnapshot[] {
+  recent(n = this.opts.recentN ?? 15): TSnapshot[] {
     return this.state.snapshots.slice(-n)
   }
 
@@ -152,18 +154,10 @@ export class MemoryEngine {
       )),
       recent: recent,
       recall: recall,
+      activeTask: this.state.activeTask ?? null,
     };
   }
-
-  // async prepare({ q }: PrepareInput): Promise<{ draftId: string; memoryContext: MemoryContext }> {
-  //   const memoryContext = await this.buildMemoryContext(q);
-  //   const draftId =
-  //     (globalThis.crypto?.randomUUID?.()
-  //       ?? Math.random().toString(36).slice(2));
-
-  //   return { draftId, memoryContext };
-  // }
-
+  
   private async updateLearningsAboutUser(input: CommitInput) {
     const current = this.state.learnings.user;
     const recent = this.recent().reverse();
@@ -319,7 +313,72 @@ export class MemoryEngine {
   }
 
 
+  private _getRecentHistoryText(n = 5): string {
+    return this.recent(n)
+      .map(s => `USER: ${s.q}\nASSISTANT: ${s.assistant}`)
+      .join('\n---\n');
+  }
+
+  private async _orchestrateTask(q: string): Promise<void> {
+    const orchestratorPrompt = memPromptOrchestrator.prompt({
+      userQuery: q,
+      recentHistory: this._getRecentHistoryText(),
+      activeTask: this.state.activeTask,
+    });
+
+    try {
+      const decision = await this.generate<TMemPromptOrchestratorJSON>(
+        orchestratorPrompt,
+        memPromptOrchestrator.schema
+      );
+
+      switch (decision.action) {
+        case 'START_TASK': {
+          console.log('[Memory] Starting new task:', decision.taskType);
+          this.state.activeTask = {
+            taskType: decision.taskType as string,
+            status: 'active',
+            state: decision.state || {},
+            history: [`Task started with query: ${q}`],
+          } as TaskContext;
+          break;
+        }
+
+        case 'CONTINUE_TASK': {
+          if (this.state.activeTask) {
+            console.log('[Memory] Continuing task:', this.state.activeTask.taskType);
+            this.state.activeTask.state = decision.state || this.state.activeTask.state;
+            this.state.activeTask.history.push(`User query: ${q}`);
+          }
+          break;
+        }
+
+        case 'END_TASK': {
+          if (this.state.activeTask) {
+            console.log('[Memory] Ending task:', this.state.activeTask.taskType);
+            console.log('[Memory] Task ended. Final state:', decision.state);
+            this.state.activeTask = null;
+          }
+          break;
+        }
+
+        case 'NO_TASK':
+        default: {
+          // Simple conversational turn; no changes
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('[Memory] Task Orchestrator failed:', error);
+      // Failsafe to avoid stuck state
+      this.state.activeTask = null;
+    }
+  }
+
   async commit(input: CommitInput) {
+    // Orchestrate task first
+    await this._orchestrateTask(input.q);
+
     const snapshot = new Snapshot(input, this.generate, this.opts.embed);
     await snapshot.summerize();
     await snapshot.embed();
@@ -364,7 +423,7 @@ export class MemoryEngine {
       facets: clearedFacets,
       ingestableUser: memPromptUserProfile.ingestPrompt(clearedUser),
       ingestableFacets: memPromptFacets.ingestPrompt(clearedFacets)
-    } };
+    }, activeTask: null } as MemoryState;
     if (this.opts.store?.clear) await this.opts.store.clear();
     else await this.persist();
   }

@@ -4,6 +4,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { atomicUITools } from "@/lib/agent/tools/ui-atomic-simple";
 import { AgentStreamEventType, ToolCallStatus } from "@/lib/agent/stream-events";
 import { systemPromptUIComposer } from "@/lib/agent/prompt.system-ui-generator";
+import { PreviousTool } from "@/lib/agent/types";
 
 const oai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 const model = oai("gpt-4o");
@@ -12,12 +13,12 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   const requestBody = await req.json();
-  let query, assistantResponse, dataPayload;
+  let query, assistantResponse, dataPayload, previousTools : PreviousTool[] = [];
   
   if (requestBody.messages !== undefined && requestBody.payload) {
-    ({ query, assistantResponse, dataPayload } = requestBody.payload);
+    ({ query, assistantResponse, dataPayload, previousTools } = requestBody.payload);
   } else {
-    ({ query, assistantResponse, dataPayload } = requestBody);
+    ({ query, assistantResponse, dataPayload, previousTools } = requestBody);
   }
 
   const stream = createUIMessageStream({
@@ -36,13 +37,22 @@ export async function POST(req: NextRequest) {
             content: systemPromptUIComposer({
               skeletonToolName,
               contentToolNames,
+              previousTools : previousTools || [],
             })
           },
           {
             role: "user",
             content: `
-Query: ${query}
-Data Payload: ${JSON.stringify(dataPayload, null, 2)}`
+    // --- CRITICAL ADDITION ---
+    // The text that the assistant just spoke to the user.
+    // This provides the immediate context for the UI you need to build.
+    Assistant's Preamble: "${assistantResponse}" 
+    
+    // The user's original query that started this turn.
+    Original User Query: "${query}"
+    
+    // The raw data available to render.
+    Data Payload: ${JSON.stringify(dataPayload, null, 2)}`
           },
           {
             role: "user",

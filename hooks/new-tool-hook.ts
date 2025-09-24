@@ -153,6 +153,8 @@ export function useNewToolCallingStream(endpoint: string = "/api/agent"): UseNew
       case AgentStreamEventType.DataToolResult: {
         const { name, result } = (evt as any).data;
         const toolId = (evt as any).id;
+
+        console.log("🔄 Data tool result:", name, result);
         
         updateState(prev => {
           const newActiveTools = new Map(prev.activeTools);
@@ -170,8 +172,7 @@ export function useNewToolCallingStream(endpoint: string = "/api/agent"): UseNew
             status: ToolStatus.Completed,
             label
           };
-          newCompletedTools.set(toolId, completedTool);
-          
+          newCompletedTools.set(toolId, completedTool);          
           return {
             activeTools: newActiveTools,
             completedTools: newCompletedTools,

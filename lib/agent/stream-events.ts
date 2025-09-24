@@ -12,7 +12,8 @@ export const AgentStreamEventType = {
   FinishStep: 'finish-step',
   Finish: 'finish',
   Error: 'error',
-  Abort:  'abort'
+  Abort:  'abort',
+  Custom: 'data-custom',
 } as const;
 
 export type AgentStreamEventType = typeof AgentStreamEventType[keyof typeof AgentStreamEventType];
@@ -38,6 +39,7 @@ export type AgentStreamEvent =
   | { type: typeof AgentStreamEventType.DataToolsResultFinished }
   | { type: typeof AgentStreamEventType.DataToolsResultAvailable }
   | { type: typeof AgentStreamEventType.Abort }
-  | { type: typeof AgentStreamEventType.Error };
+  | { type: typeof AgentStreamEventType.Error }
+  | { type: typeof AgentStreamEventType.Custom; data: any }
 
 
