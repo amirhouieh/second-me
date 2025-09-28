@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
 const stream = createUIMessageStream({
   execute: async ({ writer }) => {
-    writer.write({ type: AgentStreamEventType.Start, messageId: crypto.randomUUID?.() || 'msg' });
+    // writer.write({ type: AgentStreamEventType.Start, messageId: crypto.randomUUID?.() || 'msg' });
     const retrievalContext: Record<string, unknown> = {};
     const s = streamText({
       model,
@@ -48,7 +48,6 @@ const stream = createUIMessageStream({
             }
             const def = retrievalTools.find(tool => tool.def.name === chunk.toolName)?.def;
             const label = def?.label || chunk.toolName;
-            console.log("is being called:", chunk.toolName);
             writer.write({
               type: AgentStreamEventType.DataToolStatus,
               id: chunk.toolCallId,
@@ -66,7 +65,7 @@ const stream = createUIMessageStream({
               data: { name: chunk.toolName, status: ToolCallStatus.Completed, label } as any,
             });
             writer.write({
-              type: AgentStreamEventType.DataToolResult,
+              type: AgentStreamEventType.ToolResult,
               id: chunk.toolCallId,
               data: { name: chunk.toolName, result: (chunk as any).output },
             });

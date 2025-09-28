@@ -49,3 +49,10 @@ export const omit = (obj: any, keys: string[]) => {
     Object.entries(obj).filter(([key]
     ) => !keys.includes(key)));
 }
+
+
+export const pick = (obj: any, keys: string[]) => {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([key]
+    ) => keys.includes(key)));
+}

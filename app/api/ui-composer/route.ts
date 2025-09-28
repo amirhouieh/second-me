@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
                 data: { name: chunk.toolName, status: ToolCallStatus.Completed, label: chunk.toolName } as any,
               });
               writer.write({
-                type: AgentStreamEventType.DataToolResult,
+                type: AgentStreamEventType.ToolResult,
                 id: chunk.toolCallId,
                 data: { name: chunk.toolName, result: (chunk as any).output },
               });

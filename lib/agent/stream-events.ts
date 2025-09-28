@@ -6,7 +6,7 @@ export const AgentStreamEventType = {
   TextEnd: 'text-end',
   AssistantMessage: 'assistant-message',
   DataToolStatus: 'data-tool-status',
-  DataToolResult: 'data-tool-result',
+  
   DataToolsResultFinished: 'data-tools-result-finished',
   DataToolsResultAvailable: 'tool-output-available',
   FinishStep: 'finish-step',
@@ -14,6 +14,9 @@ export const AgentStreamEventType = {
   Error: 'error',
   Abort:  'abort',
   Custom: 'data-custom',
+
+  ToolStarted: 'tool-input-start',
+  ToolResult: 'data-tool-result',
 } as const;
 
 export type AgentStreamEventType = typeof AgentStreamEventType[keyof typeof AgentStreamEventType];
@@ -33,7 +36,7 @@ export type AgentStreamEvent =
   | { type: typeof AgentStreamEventType.TextEnd; id: string }
   | { type: typeof AgentStreamEventType.AssistantMessage; message: any }
   | { type: typeof AgentStreamEventType.DataToolStatus; id: string; data: { name: string; status: ToolCallStatus } }
-  | { type: typeof AgentStreamEventType.DataToolResult; id: string; data: { name: string; result: unknown } }
+  | { type: typeof AgentStreamEventType.ToolResult; id: string; data: { name: string; result: unknown } }
   | { type: typeof AgentStreamEventType.FinishStep }
   | { type: typeof AgentStreamEventType.Finish }
   | { type: typeof AgentStreamEventType.DataToolsResultFinished }
@@ -41,5 +44,10 @@ export type AgentStreamEvent =
   | { type: typeof AgentStreamEventType.Abort }
   | { type: typeof AgentStreamEventType.Error }
   | { type: typeof AgentStreamEventType.Custom; data: any }
+  | { 
+    type: typeof AgentStreamEventType.ToolStarted; 
+    toolName: string;
+    toolCallId: string;
+    }
 
 

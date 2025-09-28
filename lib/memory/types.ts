@@ -9,12 +9,12 @@ export type ToolCall = {
   summary?: string;
 };
 
-export type TSnapshot = {
+export type TSnapshot<T = any> = {
   id: string; 
   t: number;
   q: string;
   assistant: string;
-  payload: Object;
+  payload: T;
   summary: string;
   vec?: number[];
   tokens?: { in?: number; out?: number };

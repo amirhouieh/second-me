@@ -87,6 +87,6 @@ export const promptSystemResponseAgent = (
 
   return {
     role: "system",
-    content: promptParts.join("\n\n"),
+    content: promptParts.join("\n\n")
   };
 };

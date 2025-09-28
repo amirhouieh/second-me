@@ -143,7 +143,7 @@ export function useToolCallingStream(endpoint: string = "/api/agent"): UseToolCa
                 break;
               }
 
-              case AgentStreamEventType.DataToolResult: {
+              case AgentStreamEventType.ToolResult: {
                 const name = evt.data?.name || "tool";
                 const result = evt.data?.result;
                 setDataCache((prev) => ({ ...prev, [name]: result }));
