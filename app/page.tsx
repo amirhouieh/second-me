@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useRef, useState, useEffect, useMemo } from "react";
-import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Input } from "@/components/ui/input";
-import { Loader2, Send } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChatInput, type ChatInputHandle } from "../components/chat-input";
 import { MemoryEngine } from "@/lib/memory/engine";
 import { initMemoryEngine } from "@/lib/memory/init";
 import type { MemoryContext, TSnapshot } from "@/lib/memory/types";
@@ -21,10 +21,10 @@ import { MemoryToolNames } from "@/lib/agent/tools/memory-tools";
 import { PreviousTool } from "@/lib/agent/types";
 
 export default function HomePage() {
-  const [query, setQuery] = useState("");
   const memoryRef = useRef<MemoryEngine | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const chatInputRef = useRef<ChatInputHandle | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [isDocked, setIsDocked] = useState(false);
 
   const [history, setHistory] = useState<TSnapshot[]>([]);
   const [waitingSnapshot, setWaitingSnapshot] = useState<boolean>(false);
@@ -124,10 +124,13 @@ export default function HomePage() {
     if (hasDataForUI) {
       hasTriggeredUIRef.current = currentSnapshot.id;
       setUIToolStatusText("Composing UI...");
-      sendUIMessages([], {
-        query: currentSnapshot.q ?? '',
+      sendUIMessages([{
+        role: 'user',
+        content: currentSnapshot.q ?? '',
+      }], {
         assistantResponse: assistantStream.output,
-        dataPayload: dataForUI,
+        dataToolResults: dataResults,
+        memoryContext: memoryContextRef.current,
         previousTools,
       });
     } else {
@@ -215,11 +218,10 @@ export default function HomePage() {
     } : null);
   }, [assistantStream.output, assistantStream.status, dataResults, currentSnapshot?.id]);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim() || isLoading || waitingSnapshot) return;
+  const handleSubmit = async (q: string) => {
+    if (!q.trim() || isLoading || waitingSnapshot) return;
     if (!memoryRef.current) return;
-    const q = query.trim();
+    if (!isDocked) setIsDocked(true);
 
     const id = crypto.randomUUID();
 
@@ -248,8 +250,7 @@ export default function HomePage() {
     }));
 
     uiTargetSnapshotIdRef.current = id;
-    inputRef.current?.focus();
-    setQuery("");
+    chatInputRef.current?.focus();
 
     const memoryContext = await memoryRef.current.buildMemoryContext(q);
     memoryContextRef.current = memoryContext;
@@ -294,6 +295,9 @@ export default function HomePage() {
   };
 
   const addPreviousTool = (tool: string, type: string) => {
+    if(!tool) return;
+    if(tool === DataToolName.ParseQuery || tool === DataToolName.Think) return;
+
     const existingTool = previousTools.find(t => t.key === tool);
     if (existingTool) {
       setPreviousTools(prev => prev.map(t => t.key === tool ? { ...t, count: t.count + 1 } : t));
@@ -467,25 +471,52 @@ export default function HomePage() {
     bottomRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [messagesToRender]);
 
+  const shouldDock = isDocked;
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-2xl mx-auto space-y-4">
-        <div className="fixed inset-x-0 bottom-0">
-          <div className="max-w-2xl mx-auto p-4">
-            <form onSubmit={onSubmit} className="flex gap-2">
-              <Input
-                className="flex-1 border-none shadow-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-                placeholder="e.g., Who is Amir? / Show GitHub activity / Experience?"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                disabled={isLoading || waitingSnapshot}
-              />
-              <Button type="submit" disabled={isLoading || waitingSnapshot || !query.trim()}>
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
-            </form>
-          </div>
-        </div>
+        <AnimatePresence initial={true}>
+          {!shouldDock && (
+            <motion.div
+              key="centered-input"
+              layoutId="chat-input"
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 40 }}
+              className="fixed inset-0 flex items-center justify-center p-4 z-40"
+            >
+              <div className="w-full max-w-2xl">
+                <ChatInput
+                  ref={chatInputRef}
+                  onSubmit={handleSubmit}
+                  disabled={isLoading || waitingSnapshot}
+                />
+              </div>
+            </motion.div>
+          )}
+
+          {shouldDock && (
+            <motion.div
+              key="docked-input"
+              layoutId="chat-input"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 400, damping: 40 }}
+              className="fixed inset-x-0 bottom-0 z-40"
+            >
+              <div className="max-w-2xl mx-auto p-4">
+                <ChatInput
+                  ref={chatInputRef}
+                  onSubmit={handleSubmit}
+                  disabled={isLoading || waitingSnapshot}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div>
           <div className="space-y-6 pb-32 pr-1">
@@ -495,11 +526,6 @@ export default function HomePage() {
                 {/* User bubble (right) */}
                 <div className="flex justify-end">
                   <div className="max-w-[80%] text-right">
-                    {/* {snap.t ? (
-                      <ClientOnly>
-                        <div className="text-[11px] text-gray-400 mb-1">{new Date(snap.t).toLocaleTimeString()}</div>
-                      </ClientOnly>
-                    ) : null} */}
                     <div className="whitespace-pre-wrap text-base leading-relaxed">{snap.q}</div>
                   </div>
                 </div>

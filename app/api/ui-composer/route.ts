@@ -5,59 +5,51 @@ import { atomicUITools } from "@/lib/agent/tools/ui-atomic-simple";
 import { AgentStreamEventType, ToolCallStatus } from "@/lib/agent/stream-events";
 import { systemPromptUIComposer } from "@/lib/agent/prompt.system-ui-generator";
 import { PreviousTool } from "@/lib/agent/types";
+import { previousDataTools } from "@/lib/agent/prompt.shared";
+import { liveContextPrompt } from "@/lib/agent/prompt.shared";
 
 const oai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 const model = oai("gpt-4o");
 
 export const runtime = "nodejs";
 
-export async function POST(req: NextRequest) {
-  const requestBody = await req.json();
-  let query, assistantResponse, dataPayload, previousTools : PreviousTool[] = [];
-  
-  if (requestBody.messages !== undefined && requestBody.payload) {
-    ({ query, assistantResponse, dataPayload, previousTools } = requestBody.payload);
-  } else {
-    ({ query, assistantResponse, dataPayload, previousTools } = requestBody);
-  }
+export async function POST(req: NextRequest) {  
+  const { messages, payload: {
+    dataToolResults,
+    memoryContext,
+    previousTools,
+    assistantResponse
+  } } = await req.json();
+
+
+  const systemPrompt = systemPromptUIComposer();
+  const userPrompt = (`
+    Original User Query: "${messages[0].content}"
+    assistantResponse: "${assistantResponse}" 
+    Data Payload: ${JSON.stringify(dataToolResults, null, 2)}
+    ${previousDataTools(previousTools)}
+    ${liveContextPrompt(memoryContext, previousTools)}
+  `)
 
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       writer.write({ type: AgentStreamEventType.Start, messageId: crypto.randomUUID?.() || 'ui-msg' });
-
-      const skeletonToolName = 'layoutSkeleton';
-      const allToolNames = Object.keys(atomicUITools);
-      const contentToolNames = allToolNames.filter(name => name !== skeletonToolName);
 
       const s = streamText({
         model,
         messages: [
           {
             role: "system",
-            content: systemPromptUIComposer({
-              skeletonToolName,
-              contentToolNames,
-              previousTools : previousTools || [],
-            })
+            content: systemPrompt
           },
           {
             role: "user",
-            content: `
-    // --- CRITICAL ADDITION ---
-    // The text that the assistant just spoke to the user.
-    // This provides the immediate context for the UI you need to build.
-    Assistant's Preamble: "${assistantResponse}" 
-    
-    // The user's original query that started this turn.
-    Original User Query: "${query}"
-    
-    // The raw data available to render.
-    Data Payload: ${JSON.stringify(dataPayload, null, 2)}`
+            content: userPrompt
           },
-          {
-            role: "user",
-            content: `<required style>minimalistic, typography based, monochrome</required style>`
-          }
+          // {
+          //   role: "user",
+          //   content: `<required style>minimalistic</required style>`
+          // }
         ],
         tools: atomicUITools,
         stopWhen: stepCountIs(20),
