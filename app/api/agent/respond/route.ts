@@ -31,11 +31,7 @@ export async function POST(req: NextRequest) {
   } = await req.json();
 
   const systemPrompt = promptSystemResponseAgent(memoryContext, toolResults, previousTools);
-  console.log("[data] Tool results:");
-  console.log(Object.keys(toolResults));
-  console.log("--------------------------------");
-  console.log("parsed query")
-  console.log(toolResults.parseQuery? JSON.stringify(toolResults.parseQuery, null, 2) : "No parse query");
+  
   const result = await streamText({
     model,
     system: systemPrompt.content,

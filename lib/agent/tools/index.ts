@@ -7,8 +7,9 @@ import {
   getBioTool,
   getGithubActivityTool,
   getResumeTool,
-  getFollowUpsTool,
   thinkTool,
+  getTalksTool,
+  whoamiTool,
 } from './data-tools';
 
 import {
@@ -26,6 +27,8 @@ export const retrievalTools = [
   getBioTool,
   getGithubActivityTool,
   getResumeTool,
+  getTalksTool,
+  whoamiTool,
   // getFollowUpsTool,
 ]
 

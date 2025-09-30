@@ -5,7 +5,7 @@ export const layoutSkeletonSchema = z.object({
   skeletons: z.array(z.object({
     id: z.string().describe("A unique identifier for this skeleton area, e.g., 'user-bio' or 'project-card-1'."),
     gridArea: z.string().describe("CSS grid-area format: 'row-start / col-start / row-end / col-end'"),
-    type: z.enum(['card', 'heading', 'paragraph', 'avatar', 'image']).describe("A hint for what kind of skeleton loader to display."),
+    type: z.enum(['card', 'heading', 'paragraph', 'avatar', 'image', 'video', 'badge-list', 'social-link-list', 'stepper']).describe("A hint for what kind of skeleton loader to display."),
   })),
 });
 
@@ -19,7 +19,7 @@ export const layoutSkeletonTool = createTool({
 
 export const displayHeadingSchema = z.object({
   skeletonId: z.string().describe("The ID of the skeleton this component will replace."),
-  level: z.number().int().min(1).max(6),
+  level: z.number().int().min(1).max(5),
   text: z.string(),
   className: z.string().optional(),
 });
@@ -110,6 +110,76 @@ export const displayImageTool = createTool({
   },
 });
 
+export const displayYouTubeVideoSchema = z.object({
+  skeletonId: z.string().describe("The ID of the skeleton this component will replace."),
+  /** Accept either a full YouTube URL or just the videoId */
+  url: z.string().url().optional(),
+  videoId: z.string().optional(),
+  title: z.string().optional(),
+  start: z.number().int().min(0).default(0).describe("Start time in seconds"),
+  autoplay: z.boolean().default(false),
+  className: z.string().optional(),
+}).refine((v) => Boolean(v.url || v.videoId), { message: 'Provide either url or videoId' });
+
+export const displayYouTubeVideoTool = createTool({
+  description: 'Embed a responsive YouTube video (by url or videoId). Must target a skeleton `id`.',
+  inputSchema: displayYouTubeVideoSchema,
+  async execute(input) {
+    return input;
+  },
+});
+
+export const displaySocialMediaLinksSchema = z.object({
+  skeletonId: z.string().describe("The ID of the skeleton this component will replace."),
+  links: z.array(z.object({
+    icon: z.string().describe("A valid name from lucide-react icons, e.g., 'Github', 'Linkedin'"),
+    title: z.string(),
+    url: z.string().url(),
+  })),
+  className: z.string().optional(),
+});
+
+export const displaySocialMediaLinksTool = createTool({
+  description: "Display a list of social media links with icons.",
+  inputSchema: displaySocialMediaLinksSchema,
+  async execute(input) {
+    return input;
+  },
+});
+
+export const displayBadgeListSchema = z.object({
+  skeletonId: z.string().describe("The ID of the skeleton this component will replace."),
+  badges: z.array(z.string()),
+  variant: z.enum(['default', 'secondary', 'destructive', 'outline']).default('secondary'),
+  className: z.string().optional(),
+});
+
+export const displayBadgeListTool = createTool({
+  description: "Display a list of inline badges.",
+  inputSchema: displayBadgeListSchema,
+  async execute(input) {
+    return input;
+  },
+});
+
+export const displayStepperSchema = z.object({
+  skeletonId: z.string().describe("The ID of the skeleton this component will replace."),
+  steps: z.array(z.object({
+    title: z.string(),
+    description: z.string(),
+    date: z.string().optional(),
+  })),
+  className: z.string().optional(),
+});
+
+export const displayStepperTool = createTool({
+  description: "Display a vertical stepper, ideal for timelines or sequential data.",
+  inputSchema: displayStepperSchema,
+  async execute(input) {
+    return input;
+  },
+});
+
 export const displayProjectCardSchema = z.object({
     skeletonId: z.string().describe("The ID of the skeleton this project card will replace."),
     title: z.string(),
@@ -134,7 +204,11 @@ export const atomicUITools = {
   displayBadge: displayBadgeTool,
   displayAvatarBadge: displayAvatarBadgeTool,
   displayImage: displayImageTool,
+  displayYouTubeVideo: displayYouTubeVideoTool,
   displayProjectCard: displayProjectCardTool,
+  displaySocialMediaLinks: displaySocialMediaLinksTool,
+  displayBadgeList: displayBadgeListTool,
+  displayStepper: displayStepperTool,
 };
 
 export type LayoutSkeletonProps = z.infer<typeof layoutSkeletonSchema>;
@@ -144,4 +218,8 @@ export type DisplayCardProps = z.infer<typeof displayCardSchema>;
 export type DisplayBadgeProps = z.infer<typeof displayBadgeSchema>;
 export type DisplayAvatarBadgeProps = z.infer<typeof displayAvatarBadgeSchema>;
 export type DisplayImageProps = z.infer<typeof displayImageSchema>;
+export type DisplayYouTubeVideoProps = z.infer<typeof displayYouTubeVideoSchema>;
 export type DisplayProjectCardProps = z.infer<typeof displayProjectCardSchema>;
+export type DisplaySocialMediaLinksProps = z.infer<typeof displaySocialMediaLinksSchema>;
+export type DisplayBadgeListProps = z.infer<typeof displayBadgeListSchema>;
+export type DisplayStepperProps = z.infer<typeof displayStepperSchema>;

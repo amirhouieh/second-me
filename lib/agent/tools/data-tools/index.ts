@@ -6,3 +6,5 @@ export * as getResumeMetaTool from './tool.data.get-resume-meta';
 export * as parseQueryTool from './tool.data.parse-query';
 export * as getFollowUpsTool from './tool.data.get-followups';
 export * as thinkTool from './tool.data.think';
+export * as getTalksTool from './tool.data.get-talks';
+export * as whoamiTool from './tool.data.whoami';

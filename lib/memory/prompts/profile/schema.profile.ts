@@ -18,12 +18,12 @@ const UserProfileSchema = z.object({
     .describe(
       'EXPLICIT: user-stated facts/preferences/desires/intentions/goals; concise bullet lines joined by \n.'
     )
-    .default('None'),
+    .default(''),
   implicit: BulletText
     .describe(
       'IMPLICIT: cautiously inferred tendencies (hedged); MUST NOT restate explicit; concise bullet lines joined by \n.'
     )
-    .default('None'),
+    .default(''),
 });
 
 const AssistantSchema = z.object({
@@ -49,7 +49,7 @@ const AssistantSchema = z.object({
       .max(200)
       .optional()
       .describe('Concise note on what keeps the user engaged')
-      .default('None'),
+      .default(''),
 
 });
 

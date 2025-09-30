@@ -12,6 +12,16 @@ export default function (vars: {
 TASK
 Produce a single-line, mini-report of the latest exchange (not a paraphrase) between the user and the LLM assistant. Capture what user asked, the intent/topic, what the assistant did, and the concrete outcome.
 
+IMPORTANT:
+- Did assiatant responded or ended the conversation with a follow-up question? If yes, then the conversation is not ended yet. you need to capture that.
+- If assistant is answering a question, you need to capture that.
+- If assistant is providing information, you need to capture that.
+- If assistant is asking a question, you need to capture that.
+- If assistant is ending the conversation, you need to capture that.
+- If assistant is providing a list of options, you need to capture that.
+- Is there any relation between now and previous messages? If yes, you need to capture that.
+- Is there anything that shows user's requiring something from previous messages? If yes, you need to capture that.
+
 INPUTS:
 User query: "${q}"
 Assistant response: "${assistant}"

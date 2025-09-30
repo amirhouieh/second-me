@@ -10,7 +10,10 @@ import {
 
 import { AgentStreamEventType, ToolCallStatus } from "@/lib/agent/stream-events";
 import { promptSystemDataRetrieve } from "@/lib/agent/prompt.system.data-retrive";
-import z from "zod";
+import { liveContextPrompt } from "@/lib/agent/prompt.shared";
+import { PreviousTool } from "@/lib/agent/types";
+import { TSnapshot } from "@/lib/memory/types";
+import { MemoryContext } from "@/lib/memory/types";
 
 const oai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 const model = oai("gpt-4o");
@@ -22,7 +25,14 @@ export async function POST(req: NextRequest) {
     snapshots,
     memoryContext,
     previousTools,
-  } } = await req.json();
+  } }: {
+    messages: any[];
+    payload: {
+      snapshots: TSnapshot[];
+      memoryContext: MemoryContext;
+      previousTools: PreviousTool[];
+    }
+  } = await req.json();
 
 const stream = createUIMessageStream({
   execute: async ({ writer }) => {
@@ -32,8 +42,23 @@ const stream = createUIMessageStream({
       model,
       messages: ([
         promptSystemDataRetrieve(memoryContext, previousTools),
+        {
+          role: "user",
+          content: `respond based on the following context: ${liveContextPrompt(memoryContext, previousTools)}`,
+        },
+        ...memoryContext.recent?.flatMap(snapshot =>{
+          const user = {
+            role: "user",
+            content: snapshot.q,
+          }
+          const assistant = {
+            role: "assistant",
+            content: snapshot.assistant,
+          }
+          return [user, assistant];
+        }) || [],
         ...messages,
-      ] as any),
+      ]),
       tools: {
         ...retrievalToolsMap,
         ...memoryToolsMap(memoryContext),
@@ -48,7 +73,6 @@ const stream = createUIMessageStream({
             }
             const def = retrievalTools.find(tool => tool.def.name === chunk.toolName)?.def;
             const label = def?.label || chunk.toolName;
-            console.log("is being called:", chunk.toolName);
             writer.write({
               type: AgentStreamEventType.DataToolStatus,
               id: chunk.toolCallId,
@@ -59,7 +83,6 @@ const stream = createUIMessageStream({
           case 'tool-result': {
             const def = retrievalTools.find(tool => tool.def.name === chunk.toolName)?.def;
             const label = def?.doneLabel || def?.label || chunk.toolName;
-            console.log("is completed:", chunk.toolName);
             writer.write({
               type: AgentStreamEventType.DataToolStatus,
               id: chunk.toolCallId,
