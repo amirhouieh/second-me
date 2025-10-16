@@ -20,6 +20,7 @@ export const outputSchema = z.array(
     content: z.string(),
     id: z.string(),
     slug: z.string(),
+    images: z.array(z.object({ url: z.string(), width: z.number(), height: z.number(), autoCaption: z.string(), autoOCR: z.string(), alt: z.string() })),
   })
 );
 
@@ -40,16 +41,27 @@ export const tool = _tool<TInput, TOutput>({
   description: def.description,
   inputSchema: def.inputSchema,
   async execute({ concepts, count }) {
+
     const qb = unbody.get.googleDoc.select(
       "title",
       "autoSummary",
       "autoKeywords",
       "text",
       "remoteId",
-      "slug"
+      "slug",
+      "blocks.ImageBlock.url",
+      "blocks.ImageBlock.width",
+      "blocks.ImageBlock.height",
+      "blocks.ImageBlock.autoCaption",
+      "blocks.ImageBlock.autoOCR",
+      "blocks.ImageBlock.alt",
     );
 
+    console.log(qb.search.about(concepts.join(" ")).limit(count).getGraphQuery());
+
     const { data: { payload } } = await qb.search.about(concepts.join(" ")).limit(count).exec();
+
+    console.log(payload[0].blocks);
 
     const items = payload.map((doc: any) => ({
       title: String(doc.title || "Untitled Project"),
@@ -58,8 +70,9 @@ export const tool = _tool<TInput, TOutput>({
       content: String(doc.text || ""),
       id: String(doc.remoteId || ""),
       slug: String(doc.slug || ""),
+      images: (doc.blocks as any) || [],
     }));
-
+    
     return def.outputSchema.parse(items);
   },
 });

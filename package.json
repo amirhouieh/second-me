@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "3d-force-graph": "^1.79.0",
     "@ai-sdk/openai": "^2.0.23",
     "@emotion/is-prop-valid": "latest",
     "@hookform/resolvers": "^5.0.1",
@@ -44,6 +45,7 @@
     "@tensorflow/tfjs": "^4.20.0",
     "@tensorflow/tfjs-backend-cpu": "^4.20.0",
     "@tensorflow/tfjs-backend-wasm": "^4.20.0",
+    "@types/three": "^0.180.0",
     "ai": "^5.0.40",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
@@ -63,6 +65,8 @@
     "react-content-loader": "^7.0.2",
     "react-day-picker": "8.10.1",
     "react-dom": "^19",
+    "react-force-graph": "^1.48.1",
+    "react-force-graph-3d": "^1.29.0",
     "react-hook-form": "^7.55.0",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^2.1.7",
@@ -71,6 +75,7 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "three": "^0.180.0",
     "unbody": "^0.0.14",
     "vaul": "^0.9.6",
     "zod": "3.25.8",

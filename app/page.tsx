@@ -532,7 +532,7 @@ export default function HomePage() {
 
                 {/* Assistant bubble (left) */}
                 <div className="flex justify-start">
-                  <div className="max-w-[80%] text-left">
+                  <div className="w-full text-left">
                     <div className="prose prose-sm max-w-none pt-4 pb-4 mb-4">
                       {
                         (snap?.assistant && String(snap.assistant).trim().length > 0) ? (
@@ -552,7 +552,7 @@ export default function HomePage() {
                       }
                     </div>
                     {/* Render generated UI components if available */}
-                    <div className="">
+                    <div className="w-full">
                       {
                         uiToolStatusText && ((currentSnapshot?.id === snap.id)) && (
                           <div className="pb-2 flex items-center gap-2 text-gray-500 mb-2 mt-4">

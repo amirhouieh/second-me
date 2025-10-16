@@ -13,6 +13,8 @@ export type TOutput = z.infer<typeof outputSchema>;
 export const def = {
     name: DataToolName.WhoAmI,
     description: "Get everything about yourself (the AI assistant). When user asks who you are, or what you can do, or what topics you can talk about, you should call this tool.",
+    label: "Who am I?",
+    doneLabel: "Got it, who am I?",
     inputSchema,
     outputSchema,
 };
